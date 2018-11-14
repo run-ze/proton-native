@@ -103,12 +103,38 @@ class Area extends DesktopComponent {
     this.root = root;
     this.props = { ...props };
     this.setDefaults(props);
+    this.width = null;
+    this.height = null;
 
-    this.element = new libui.UiArea(
+    const create = (draw, mouse, enter, broken, key) => {
+      if (this.props.scrolling) {
+        return new libui.UiArea(
+          draw,
+          mouse,
+          enter,
+          broken,
+          key,
+          this.props.scrolling.w,
+          this.props.scrolling.h
+        );
+      } else {
+        return new libui.UiArea(draw, mouse, enter, broken, key);
+      }
+    };
+
+    this.element = create(
       (area, p) => {
+        const width = p.getAreaWidth();
+        const height = p.getAreaHeight();
+        if (width !== this.width || height !== this.height) {
+          this.width = width;
+          this.height = height;
+          this.props.onSizeChange({ width, height });
+        }
+
         for (let i = 0; i < this.children.length; i += 1) {
           if (typeof this.children[i] === 'object') {
-            this.children[i].render(this, area, p);
+            this.children[i].draw(this, area, p);
           }
         }
       },
@@ -147,10 +173,15 @@ Area.propTypes = {
   onMouseLeave: PropTypes.func,
   onKeyUp: PropTypes.func,
   onKeyDown: PropTypes.func,
+  onSizeChange: PropTypes.func,
   children: PropTypes.oneOfType([
     PropTypes.element,
     PropTypes.arrayOf(PropTypes.element),
   ]),
+  scrolling: PropTypes.exact({
+    w: PropTypes.number.isRequired,
+    h: PropTypes.number.isRequired,
+  }),
 };
 
 Area.defaultProps = {
@@ -158,10 +189,11 @@ Area.defaultProps = {
   onMouseMove: e => {},
   onMouseUp: e => {},
   onMouseDown: e => {},
-  onMouseEnter: area => {},
-  onMouseLeave: area => {},
-  onKeyUp: (area, event) => {},
-  onKeyDown: (area, event) => {},
+  onMouseEnter: () => {},
+  onMouseLeave: () => {},
+  onKeyUp: event => {},
+  onKeyDown: event => {},
+  onSizeChange: event => {},
 };
 
 function fallback(...vals) {
@@ -177,12 +209,12 @@ function fallback(...vals) {
   }
 }
 
-function toLibuiColor(color) {
+function toLibuiColor(color, alpha = 1) {
   return new libui.Color(
     color.red() / 255,
     color.green() / 255,
     color.blue() / 255,
-    color.alpha()
+    color.alpha() * alpha
   );
 }
 
@@ -243,7 +275,7 @@ class AreaComponent {
         return num;
       } else if (val.slice(-1) == '%') {
         let num = Number(val.slice(0, -1));
-        return num / 100 * (y ? p.getAreaHeight() : p.getAreaWidth());
+        return (num / 100) * (y ? p.getAreaHeight() : p.getAreaWidth());
       }
     } else if (typeof val === 'number') {
       return val;
@@ -258,7 +290,7 @@ class AreaComponent {
         return num;
       } else if (val.slice(-1) == '%') {
         let num = Number(val.slice(0, -1));
-        return num / 100 * (y ? this.getHeight(p) : this.getWidth(p));
+        return (num / 100) * (y ? this.getHeight(p) : this.getWidth(p));
       }
     } else if (typeof val === 'number') {
       return val;
@@ -383,7 +415,7 @@ class AreaComponent {
     p.getContext().transform(mat);
   }
 
-  render(parent, area, p, props) {
+  draw(parent, area, p, props) {
     this.parent = parent;
     const { children, ...appendProps } = this.props;
     props = { ...props, ...appendProps };
@@ -392,19 +424,10 @@ class AreaComponent {
       this.applyTransforms(p);
     }
 
-    const path = this.draw(area, p, props);
+    const path = this.drawPath(area, p, props);
 
     if (path) {
-      const fillBrush =
-        props.fill &&
-        props.fill != 'none' &&
-        createBrush(Color(props.fill), Number(props.fillOpacity));
-      const strokeBrush =
-        props.stroke &&
-        props.stroke != 'none' &&
-        createBrush(Color(props.stroke), Number(props.strokeOpacity));
-
-      if (strokeBrush) {
+      if (props.stroke && props.stroke != 'none') {
         const sp = new libui.DrawStrokeParams();
 
         switch (props.strokeLinecap) {
@@ -434,15 +457,35 @@ class AreaComponent {
         sp.thickness = Number(props.strokeWidth);
         sp.miterLimit = Number(props.strokeMiterlimit);
 
-        p.getContext().stroke(path, strokeBrush, sp);
+        if (typeof props.stroke == 'object') {
+          // gradient
+          p.getContext().stroke(path, props.stroke, sp);
+        } else {
+          // solid
+          const strokeBrush = createBrush(
+            Color(props.stroke),
+            Number(props.strokeOpacity)
+          );
+          p.getContext().stroke(path, strokeBrush, sp);
+          strokeBrush.free();
+        }
 
         sp.free();
-        strokeBrush.free();
       }
 
-      if (fillBrush) {
-        p.getContext().fill(path, fillBrush);
-        fillBrush.free();
+      if (props.fill && props.fill != 'none') {
+        if (typeof props.fill == 'object') {
+          // gradient
+          p.getContext().fill(path, props.fill);
+        } else {
+          // solid
+          const fillBrush = createBrush(
+            Color(props.fill),
+            Number(props.fillOpacity)
+          );
+          p.getContext().fill(path, fillBrush);
+          fillBrush.free();
+        }
       }
 
       path.freePath();
@@ -453,14 +496,14 @@ class AreaComponent {
     }
   }
 
-  draw(area, p) {}
+  drawPath(area, p, props) {}
 }
 
 const AreaComponentPropTypes = {
   transform: PropTypes.string,
-  fill: PropTypes.string,
+  fill: PropTypes.oneOfType([PropTypes.object, PropTypes.string]),
   fillOpacity: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
-  stroke: PropTypes.string,
+  stroke: PropTypes.oneOfType([PropTypes.object, PropTypes.string]),
   strokeOpacity: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
   strokeWidth: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
   strokeLinecap: PropTypes.oneOf(['flat', 'round', 'square']),
@@ -487,10 +530,26 @@ Area.Group = class AreaGroup extends AreaComponent {
     this.children.push(child);
   }
 
-  draw(area, p, props) {
+  removeChild(child) {
+    if (child.children) {
+      // we recursively remove all children
+      child.children.forEach(function(w) {
+        child.removeChild(w);
+      });
+    }
+    const index = this.children.indexOf(child);
+    this.children.splice(index, 1);
+  }
+
+  insertChild(child, beforeChild) {
+    const beforeIndex = this.children.indexOf(beforeChild);
+    this.children.splice(beforeIndex, 0, child);
+  }
+
+  drawPath(area, p, props) {
     for (let i = 0; i < this.children.length; i += 1) {
       if (typeof this.children[i] === 'object') {
-        this.children[i].render(this, area, p, props);
+        this.children[i].draw(this, area, p, props);
       }
     }
   }
@@ -511,7 +570,7 @@ Area.Rectangle = class Rectangle extends AreaComponent {
     return this.parseParent(this.props.height, p, true);
   }
 
-  draw(area, p) {
+  drawPath(area, p, props) {
     const path = new libui.UiDrawPath(libui.fillMode.winding);
     path.addRectangle(
       this.parseParent(this.props.x, p),
@@ -546,7 +605,7 @@ Area.Line = class Line extends AreaComponent {
     );
   }
 
-  draw(area, p) {
+  drawPath(area, p, props) {
     const path = new libui.UiDrawPath(libui.fillMode.winding);
     path.newFigure(
       this.parseParent(this.props.x1, p),
@@ -579,7 +638,7 @@ Area.Arc = class Arc extends AreaComponent {
     return getWidth(p);
   }
 
-  draw(area, p) {
+  drawPath(area, p, props) {
     const path = new libui.UiDrawPath(libui.fillMode.winding);
     path.newFigureWithArc(
       this.parseParent(this.props.x, p),
@@ -617,7 +676,7 @@ Area.Circle = class Circle extends AreaComponent {
     return getWidth(p);
   }
 
-  draw(area, p) {
+  drawPath(area, p, props) {
     const path = new libui.UiDrawPath(libui.fillMode.winding);
     path.newFigureWithArc(
       this.parseParent(this.props.x, p),
@@ -644,7 +703,7 @@ Area.Circle.defaultProps = {
 };
 
 Area.Bezier = class Bezier extends AreaComponent {
-  draw(area, p) {
+  drawPath(area, p, props) {
     const path = new libui.UiDrawPath(libui.fillMode.winding);
     path.newFigure(
       this.parseParent(this.props.x1, p),
@@ -677,7 +736,7 @@ Area.Bezier.propTypes = {
 };
 
 Area.Path = class Path extends AreaComponent {
-  draw(area, p) {
+  drawPath(area, p, props) {
     const path = new libui.UiDrawPath(
       this.props.fillRule === 'evenodd'
         ? libui.fillMode.alternate
@@ -750,6 +809,40 @@ Area.Text = class AreaText extends AreaComponent {
     this.children.push(child);
   }
 
+  removeChild(child) {
+    if (child.children) {
+      // we recursively remove all children
+      child.children.forEach(function(w) {
+        child.removeChild(w);
+      });
+    }
+    const index = this.children.indexOf(child);
+    this.children.splice(index, 1);
+  }
+
+  insertChild(child, beforeChild) {
+    const beforeIndex = this.children.indexOf(beforeChild);
+    this.children.splice(beforeIndex, 0, child);
+  }
+
+  update(oldProps, newProps) {
+    this.props = { ...this.props, ...newProps, ...newProps.children };
+
+    // For text nodes, `appendChild` gets called only on the initial render.
+    // `removeChild` is never called. Therefore: updating this.children manually
+    // to apply text changes...
+    const newChildren = [].concat(newProps.children).filter(Boolean);
+    for (let x in newChildren) {
+      if (
+        typeof newChildren[x] === 'string' &&
+        newChildren[x] != this.children[x]
+      ) {
+        this.children[x] = newChildren[x];
+      }
+    }
+    if (this.parent) this.getArea().queueRedrawAll();
+  }
+
   appendText(t, ...attr) {
     if (this.parent instanceof AreaText) {
       this.parent.appendText(t, ...attr);
@@ -762,7 +855,7 @@ Area.Text = class AreaText extends AreaComponent {
     }
   }
 
-  render(parent, area, p, props, parentStyle = {}) {
+  draw(parent, area, p, props, parentStyle = {}) {
     this.parent = parent;
     let style = { ...parentStyle, ...this.props.style };
 
@@ -828,7 +921,7 @@ Area.Text = class AreaText extends AreaComponent {
       if (typeof v === 'string') {
         this.appendText(v, ...attrs);
       } else {
-        v.render(this, area, p, props, style);
+        v.draw(this, area, p, props, style);
       }
     });
 
@@ -854,10 +947,15 @@ Area.Text = class AreaText extends AreaComponent {
         libui.textStretch.normal
       );
 
+      const area = this.parent.parent;
+      const width = area.props.scrolling
+        ? area.props.scrolling.w
+        : p.getAreaWidth();
+
       const layout = new libui.DrawTextLayout(
         this.str,
         font,
-        p.getAreaWidth() - this.parseParent(this.props.x, p, false),
+        width - this.parseParent(this.props.x, p, false),
         textAlign
       );
 
@@ -865,13 +963,11 @@ Area.Text = class AreaText extends AreaComponent {
         this.applyTransforms(p);
       }
 
-      p
-        .getContext()
-        .text(
-          this.parseParent(this.props.x, p, false),
-          this.parseParent(this.props.y, p, true),
-          layout
-        );
+      p.getContext().text(
+        this.parseParent(this.props.x, p, false),
+        this.parseParent(this.props.y, p, true),
+        layout
+      );
 
       font.free();
       layout.free();
@@ -883,10 +979,16 @@ Area.Text = class AreaText extends AreaComponent {
   }
 };
 
-function areaProp(props, propName, componentName) {
+function areaTextProp(props, propName, componentName) {
   const v = props[propName];
   if (
-    !(typeof v === 'string' || v.type === 'AREATEXT' || v.type === StyledText)
+    !(
+      v === false || // Needed for conditional rendering
+      v === null ||
+      typeof v === 'string' ||
+      v.type === 'AREATEXT' ||
+      v.type === StyledText
+    )
   ) {
     return new Error(
       'Invalid prop `' +
@@ -900,9 +1002,12 @@ function areaProp(props, propName, componentName) {
 }
 
 Area.Text.propTypes = {
-  children: PropTypes.oneOfType([areaProp, PropTypes.arrayOf(areaProp)]),
-  x: PropTypes.number,
-  y: PropTypes.number,
+  children: PropTypes.oneOfType([
+    areaTextProp,
+    PropTypes.arrayOf(areaTextProp),
+  ]),
+  x: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+  y: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
 };
 
 Area.Text.defaultProps = {

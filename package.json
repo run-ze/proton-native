@@ -1,6 +1,6 @@
 {
   "name": "proton-native",
-  "version": "1.1.8",
+  "version": "1.1.10",
   "description": "React Native for the desktop, cross compatible",
   "main": "bin/index.js",
   "lint-staged": {
@@ -12,7 +12,7 @@
   "scripts": {
     "demo": "babel-node Demo.js",
     "prettier":
-      "prettier --single-quote --trailing-comma es5 --write 'src/**/*.js' 'examples/*.js' ./**/*.md",
+      "prettier --single-quote --trailing-comma es5 --write 'src/**/*.js' 'examples/*.js' './**/*.md' Demo.js",
     "build": "babel src -d bin",
     "pub": "babel src -d bin && npm publish",
     "precommit": "lint-staged"

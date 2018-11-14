@@ -2,7 +2,7 @@
 
 A component onto which area components like rectangles or circles can be drawn.
 
-Some props can be applied to all area components (**including Area itself** and children): see [Area Props](area_props.md).
+Some props can be applied to all area components (**including Area itself** and children): see [Area Props](component_APIs/area_props.md).
 
 ```jsx
 import React, { Component } from 'react';
@@ -34,14 +34,16 @@ render(<Example />);
 
 ## Props
 
-* [visible](#visible)
-* [onMouseMove](#onMouseMove)
-* [onMouseUp](#onMouseUp)
-* [onMouseDown](#onMouseDown)
-* [onMouseEnter](#onMouseEnter)
-* [onMouseLeave](#onMouseLeave)
-* [onKeyUp](#onKeyUp)
-* [onKeyDown](#onKeyDown)
+- [visible](#visible)
+- [scrolling](#scrolling)
+- [onMouseMove](#onMouseMove)
+- [onMouseUp](#onMouseUp)
+- [onMouseDown](#onMouseDown)
+- [onMouseEnter](#onMouseEnter)
+- [onMouseLeave](#onMouseLeave)
+- [onKeyUp](#onKeyUp)
+- [onKeyDown](#onKeyDown)
+- [onSizeChange](#onSizeChange)
 
 ## Reference
 
@@ -52,6 +54,14 @@ Whether the area can be seen.
 | **Type** | **Required** | **Default** |
 | -------- | ------------ | ----------- |
 | bool     | No           | true        |
+
+### scrolling
+
+If set, a scrolling area is created. The specified width and height specify the size of the inner scrolling view.
+
+| **Type**                      | **Required** |
+| ----------------------------- | ------------ |
+| object {h: number, w: number} | No           |
 
 ### onMouseMove
 
@@ -112,3 +122,11 @@ Return `true` to signal that this event got handled (always returning true will 
 | **Type**                                                                                 | **Required** |
 | ---------------------------------------------------------------------------------------- | ------------ |
 | function({key: string, extKey: string, modifierKey: string, modifiers: Array\<string\>}) | No           |
+
+### onSizeChange
+
+Called when the area's size has changed.
+
+| **Type**                                    | **Required** |
+| ------------------------------------------- | ------------ |
+| function({ width: number, height: number }) | No           |
